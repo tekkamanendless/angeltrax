@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"net/http"
 	"os"
 
 	"github.com/sirupsen/logrus"
@@ -15,6 +17,7 @@ type Config struct {
 	Username string `json:"username"`
 	Password string `json:"password"`
 	Server   string `json:"server"`
+	Key      string `json:"key"`
 }
 
 func main() {
@@ -34,6 +37,27 @@ func main() {
 
 	ctx := context.Background()
 	var client angeltrax.Client
+
+	loginOrFail := func() {
+		if client.Server == "" {
+			logrus.Errorf("Missing server.")
+			os.Exit(1)
+		}
+		if client.Username == "" {
+			logrus.Errorf("Missing username.")
+			os.Exit(1)
+		}
+		if client.Password == "" {
+			logrus.Errorf("Missing password.")
+			os.Exit(1)
+		}
+
+		err := client.Login(ctx, client.Server, client.Username, client.Password)
+		if err != nil {
+			logrus.Errorf("Could not log in: [%T] %v", err, err)
+			os.Exit(1)
+		}
+	}
 
 	rootCmd := cobra.Command{
 		Use: "angeltrax",
@@ -64,6 +88,7 @@ func main() {
 					client.Server = config.Server
 					client.Username = config.Username
 					client.Password = config.Password
+					client.Key = config.Key
 				}
 			}
 		},
@@ -93,11 +118,18 @@ func main() {
 					os.Exit(1)
 				}
 
+				err := client.Login(ctx, server, username, password)
+				if err != nil {
+					logrus.Errorf("Error: [%T] %v", err, err)
+					os.Exit(1)
+				}
+
 				if configFilename != "" {
 					var config Config
-					config.Server = server
-					config.Username = username
-					config.Password = password
+					config.Server = client.Server
+					config.Username = client.Username
+					config.Password = client.Password
+					config.Key = client.Key
 
 					contents, err := json.Marshal(config)
 					if err != nil {
@@ -110,17 +142,58 @@ func main() {
 						os.Exit(1)
 					}
 				}
-
-				err := client.Login(ctx, server, username, password)
-				if err != nil {
-					logrus.Errorf("Error: [%T] %v", err, err)
-					os.Exit(1)
-				}
 			},
 		}
 		cmd.Flags().StringVar(&server, "server", "", "The server")
 		cmd.Flags().StringVar(&username, "username", "", "The username")
 		cmd.Flags().StringVar(&password, "password", "", "The password")
+		rootCmd.AddCommand(cmd)
+	}
+
+	{
+		cmd := &cobra.Command{
+			Use:   "center-groups",
+			Short: "",
+			Args:  cobra.ExactArgs(0),
+			Run: func(cmd *cobra.Command, args []string) {
+				loginOrFail()
+
+				output, err := client.GetCenterGroups(ctx)
+				if err != nil {
+					logrus.Errorf("Error: [%T] %v", err, err)
+					os.Exit(1)
+				}
+				for _, group := range output.Data {
+					fmt.Printf("%d: %d / %s\n", group.GroupID, group.GroupFatherID, group.GroupName)
+				}
+			},
+		}
+		rootCmd.AddCommand(cmd)
+	}
+
+	{
+		var service string
+		var method string
+		cmd := &cobra.Command{
+			Use:   "raw-request [--service ${service}] [--method ${method}] ${path}",
+			Short: "Perform a raw request",
+			Args:  cobra.ExactArgs(1),
+			Run: func(cmd *cobra.Command, args []string) {
+				loginOrFail()
+
+				path := args[0]
+
+				var output json.RawMessage
+				err := client.RawServiceRequest(ctx, service, method, path, nil, nil, &output)
+				if err != nil {
+					logrus.Errorf("Error: [%T] %v", err, err)
+					os.Exit(1)
+				}
+				fmt.Printf("%s\n", output)
+			},
+		}
+		cmd.Flags().StringVar(&service, "service", "webclient", "The service")
+		cmd.Flags().StringVar(&method, "method", http.MethodGet, "The method")
 		rootCmd.AddCommand(cmd)
 	}
 

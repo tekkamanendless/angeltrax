@@ -18,8 +18,8 @@ type Client struct {
 	ServerPort int
 	Username   string
 	Password   string
-	key        string
-	serverMap  map[string]ClientServer
+	Key        string
+	serviceMap map[string]ClientService
 	httpClient http.Client
 }
 
@@ -27,8 +27,8 @@ func (c *Client) init() {
 	if c.ServerPort == 0 {
 		c.ServerPort = 7264
 	}
-	if c.serverMap == nil {
-		c.serverMap = map[string]ClientServer{}
+	if c.serviceMap == nil {
+		c.serviceMap = map[string]ClientService{}
 	}
 }
 
@@ -39,7 +39,7 @@ func (c *Client) GetServers(ctx context.Context, server string) (*GetServersResp
 	values.Set("did", "bbb")
 
 	var output GetServersResponse
-	err := c.rawRequest(ctx, http.MethodGet, "http://"+server+":"+fmt.Sprintf("%d", c.ServerPort)+"/serversforclient/BalanceServer.ashx", values, nil, &output)
+	err := c.RawRequest(ctx, http.MethodGet, "http://"+server+":"+fmt.Sprintf("%d", c.ServerPort)+"/serversforclient/BalanceServer.ashx", values, nil, &output)
 	if err != nil {
 		return nil, err
 	}
@@ -47,10 +47,10 @@ func (c *Client) GetServers(ctx context.Context, server string) (*GetServersResp
 	return &output, nil
 }
 
-func (c *Client) rawServerRequest(ctx context.Context, server, method, path string, values url.Values, requestData, responseData interface{}) error {
+func (c *Client) RawServiceRequest(ctx context.Context, server, method, path string, values url.Values, requestData, responseData interface{}) error {
 	c.init()
 
-	info, ok := c.serverMap[server]
+	info, ok := c.serviceMap[server]
 	if !ok {
 		return fmt.Errorf("no server info for: %s", server)
 	}
@@ -75,9 +75,9 @@ func (c *Client) rawServerRequest(ctx context.Context, server, method, path stri
 		base += ":" + fmt.Sprintf("%d", info.Port)
 	}
 
-	return c.rawRequest(ctx, method, base+"/"+strings.TrimPrefix(path, "/"), values, requestData, responseData)
+	return c.RawRequest(ctx, method, base+"/"+strings.TrimPrefix(path, "/"), values, requestData, responseData)
 }
-func (c *Client) rawRequest(ctx context.Context, method, path string, values url.Values, requestData, responseData interface{}) error {
+func (c *Client) RawRequest(ctx context.Context, method, path string, values url.Values, requestData, responseData interface{}) error {
 	c.init()
 	if len(values) > 0 {
 		path = path + "?" + values.Encode()
@@ -150,19 +150,23 @@ func (c *Client) Login(ctx context.Context, server, username, password string) e
 	if err != nil {
 		return err
 	}
-	c.serverMap = getServersResponse.ServerMap
+	c.serviceMap = getServersResponse.ServiceMap
 
 	values := url.Values{}
 	values.Set("username", username)
 	values.Set("password", password)
 
 	var output GetKeyResponse
-	err = c.rawServerRequest(ctx, "webclient", http.MethodGet, "/api/v1/inner/key", values, nil, &output)
+	err = c.RawServiceRequest(ctx, "webclient", http.MethodGet, "/api/v1/inner/key", values, nil, &output)
 	if err != nil {
 		return err
 	}
 
-	c.key = output.Data.Key
+	// For whatever reason, these guys return the key already URL-escaped.
+	c.Key, err = url.PathUnescape(output.Data.Key)
+	if err != nil {
+		return err
+	}
 
 	return nil
 }

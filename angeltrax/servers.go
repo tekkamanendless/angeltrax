@@ -6,18 +6,18 @@ import (
 )
 
 type GetServersResponse struct {
-	ServerMap         map[string]ClientServer `json:"-"`
-	ClienPath         string                  `json:"clienpath"`      // This is probably a typo on their part.
-	LicenseTimeout    string                  `json:"licensetimeout"` // This is probably a date.
-	LicenseTimeoutTip int                     `json:"licensetimeouttip"`
-	ServerDate        string                  `json:"serverdate"`
-	Support           []string                `json:"support"`
-	Upgrade           int                     `json:"upgrade"`
-	Version           string                  `json:"version"`
+	ServiceMap        map[string]ClientService `json:"-"`
+	ClienPath         string                   `json:"clienpath"`      // This is probably a typo on their part.
+	LicenseTimeout    string                   `json:"licensetimeout"` // This is probably a date.
+	LicenseTimeoutTip int                      `json:"licensetimeouttip"`
+	ServerDate        string                   `json:"serverdate"`
+	Support           []string                 `json:"support"`
+	Upgrade           int                      `json:"upgrade"`
+	Version           string                   `json:"version"`
 }
 
 func (r *GetServersResponse) UnmarshalJSON(contents []byte) error {
-	r.ServerMap = map[string]ClientServer{}
+	r.ServiceMap = map[string]ClientService{}
 
 	var m map[string]json.RawMessage
 	err := json.Unmarshal(contents, &m)
@@ -62,18 +62,18 @@ func (r *GetServersResponse) UnmarshalJSON(contents []byte) error {
 				return fmt.Errorf("could not unmarshal key %q: %v", key, err)
 			}
 		default:
-			var clientServer ClientServer
+			var clientServer ClientService
 			err = json.Unmarshal(value, &clientServer)
 			if err != nil {
 				return fmt.Errorf("could not unmarshal client server %q: %v", key, err) // TODO: CONSIDER JUST WARNING HERE INSTEAD
 			}
-			r.ServerMap[key] = clientServer
+			r.ServiceMap[key] = clientServer
 		}
 	}
 	return nil
 }
 
-type ClientServer struct {
+type ClientService struct {
 	Address       string `json:"ip,omitempty"`
 	Port          int    `json:"port,omitempty"`
 	SecureAddress string `json:"ips,omitempty"`
