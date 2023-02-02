@@ -158,13 +158,47 @@ func main() {
 			Run: func(cmd *cobra.Command, args []string) {
 				loginOrFail()
 
-				output, err := client.GetCenterGroups(ctx)
+				getCenterGroupsResponse, err := client.GetCenterGroups(ctx)
 				if err != nil {
 					logrus.Errorf("Error: [%T] %v", err, err)
 					os.Exit(1)
 				}
-				for _, group := range output.Data {
-					fmt.Printf("%d: %d / %s\n", group.GroupID, group.GroupFatherID, group.GroupName)
+
+				getCenterDevicesResponse, err := client.GetCenterDevices(ctx)
+				if err != nil {
+					logrus.Errorf("Error: [%T] %v", err, err)
+					os.Exit(1)
+				}
+
+				for _, group := range getCenterGroupsResponse.Data {
+					var groupName string
+					{
+						currentGroup := &group
+						for currentGroup != nil {
+							if groupName == "" {
+								groupName = currentGroup.GroupName
+							} else {
+								groupName = currentGroup.GroupName + "/" + groupName
+							}
+
+							parentID := currentGroup.GroupFatherID
+							currentGroup = nil
+							for _, g := range getCenterGroupsResponse.Data {
+								if g.GroupID == parentID {
+									currentGroup = &g
+									break
+								}
+							}
+						}
+					}
+
+					fmt.Printf("Group #%d: %s\n", group.GroupID, groupName)
+					for _, device := range getCenterDevicesResponse.Data {
+						if device.GroupID != group.GroupID {
+							continue
+						}
+						fmt.Printf("   Device #%s: %s | Channels: %d\n", device.DeviceID, device.CarLicense, device.ChannelCount)
+					}
 				}
 			},
 		}
