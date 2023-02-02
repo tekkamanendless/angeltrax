@@ -105,15 +105,24 @@ func main() {
 			Short: "Login",
 			Args:  cobra.ExactArgs(0),
 			Run: func(cmd *cobra.Command, args []string) {
-				if client.Server == "" && server == "" {
+				if server == "" {
+					server = client.Server
+				}
+				if username == "" {
+					username = client.Username
+				}
+				if password == "" {
+					password = client.Password
+				}
+				if server == "" {
 					logrus.Errorf("Missing server.")
 					os.Exit(1)
 				}
-				if client.Username == "" && username == "" {
+				if username == "" {
 					logrus.Errorf("Missing username.")
 					os.Exit(1)
 				}
-				if client.Password == "" && password == "" {
+				if password == "" {
 					logrus.Errorf("Missing password.")
 					os.Exit(1)
 				}
@@ -200,6 +209,26 @@ func main() {
 						fmt.Printf("   Device #%s: %s | Channels: %d\n", device.DeviceID, device.CarLicense, device.ChannelCount)
 					}
 				}
+			},
+		}
+		rootCmd.AddCommand(cmd)
+	}
+
+	{
+		cmd := &cobra.Command{
+			Use:   "tasks",
+			Short: "",
+			Args:  cobra.ExactArgs(0),
+			Run: func(cmd *cobra.Command, args []string) {
+				loginOrFail()
+
+				_, err := client.RegisterLogin(ctx)
+				if err != nil {
+					logrus.Errorf("Error: [%T] %v", err, err)
+					os.Exit(1)
+				}
+
+				// TODO: FIND THE TASKS
 			},
 		}
 		rootCmd.AddCommand(cmd)

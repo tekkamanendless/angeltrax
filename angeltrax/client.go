@@ -14,13 +14,14 @@ import (
 )
 
 type Client struct {
-	Server     string
-	ServerPort int
-	Username   string
-	Password   string
-	Key        string
-	serviceMap map[string]ClientService
-	httpClient http.Client
+	Server        string
+	ServerPort    int
+	Username      string
+	Password      string
+	Key           string
+	serviceMap    map[string]ClientService
+	hostCookieMap map[string][]string
+	httpClient    http.Client
 }
 
 func (c *Client) init() {
@@ -29,6 +30,9 @@ func (c *Client) init() {
 	}
 	if c.serviceMap == nil {
 		c.serviceMap = map[string]ClientService{}
+	}
+	if c.hostCookieMap == nil {
+		c.hostCookieMap = map[string][]string{}
 	}
 }
 
@@ -115,12 +119,27 @@ func (c *Client) RawRequest(ctx context.Context, method, path string, values url
 	if contentType != "" {
 		request.Header.Set("Content-Type", contentType)
 	}
+	for _, cookie := range c.hostCookieMap[request.Host] {
+		request.Header.Add("Cookie", cookie)
+	}
+
+	for key, values := range request.Header {
+		logrus.WithContext(ctx).Debugf("> %s: %v", key, values)
+	}
 
 	response, err := c.httpClient.Do(request)
 	if err != nil {
 		return err
 	}
 	defer response.Body.Close()
+
+	if cookies := response.Header.Values("Set-Cookie"); len(cookies) > 0 {
+		c.hostCookieMap[request.Host] = cookies
+	}
+
+	for key, values := range response.Header {
+		logrus.WithContext(ctx).Debugf("< %s: %v", key, values)
+	}
 
 	logrus.Debugf("Response status: %d", response.StatusCode)
 	if response.StatusCode > 299 {
