@@ -34,7 +34,36 @@ type MonitorAutoDownloadResponse struct {
 	} `json:"rows"`
 }
 
-type QueryAutoDownloadResponse struct {
+type MonitorAutoDownloadTaskResponse struct {
+	TaskID       int           `json:"TaskID"`
+	TaskName     string        `json:"TaskName"`
+	DeviceID     string        `json:"Device"`
+	StartExecute string        `json:"StartExecute"` // yyyy-mm-dd
+	EndExecute   string        `json:"EndExecute"`   // yyyy-mm-dd
+	StartTime    string        `json:"StartTime"`    // hh:mm:ss
+	EndTime      string        `json:"EndTime"`      // hh:mm:ss
+	Period       int           `json:"Period"`
+	TaskType     int           `json:"TaskType"`
+	TaskPeriod   []interface{} `json:"TaskPeriod"`  // TODO: WHAT IS THIS FORMAT?
+	TaskChannel  []int         `json:"TaskChannel"` // List of one-indexed channels.
+	TaskEvent    []interface{} `json:"TaskEvent"`   // TODO: WHAT IS THIS FORMAT?
+	TaskIO       []interface{} `json:"TaskIO"`      // TODO: WHAT IS THIS FORMAT?
+	Relation     string        `json:"Relation"`
+	CarLicense   string        `json:"Carlicense"`
+	NetMode      string        `json:"NetMode"`
+	Effective    int           `json:"Effective"`
+	Stream       int           `json:"Stream"`
+	VideoType    int           `json:"VideoType"`
+	StoreType    int           `json:"StoreType"`
+}
+
+type GlobalReportAutoDownloadInput struct {
+	DeviceID  string `form:"Device"`
+	StartDate string `form:"StartTime"` // yyyy-mm-dd
+	EndDate   string `form:"EndTime"`   // yyyy-mm-dd
+}
+
+type GlobalReportAutoDownloadResponse struct {
 	Total int `json:"total"`
 	Rows  []struct {
 		TaskID      int    `json:"TaskID"`
@@ -55,7 +84,7 @@ type QueryAutoDownloadResponse struct {
 	} `json:"rows"`
 }
 
-type QueryAutoDownloadTaskResponse struct {
+type GlobalReportAutoDownloadTaskResponse struct {
 	Total int `json:"total"`
 	Rows  []struct {
 		DeviceID    string `json:"Device"`
@@ -77,23 +106,23 @@ type QueryAutoDownloadTaskResponse struct {
 }
 
 type CreateAutoDownloadTaskInput struct {
-	TaskName  string
-	DeviceID  string
-	StartTime string // hh:mm:ss
-	EndTime   string // hh:mm:ss
-	//TaskType int // 1
-	StartExecute string // yyyy-mm-dd
-	EndExecute   string // yyyy-mm-dd
-	Period       int    // 0
-	TaskChannels []int
-	//TaskPeriod string
-	//TaskIO string
-	//TaskEvent string // []
-	//NetMode int // 7
-	EffectiveDays int
-	Stream        int // 1
-	Storetype     int // 2
-	VideoType     int // 0
+	TaskName  string `form:"TaskName"`
+	DeviceID  string `form:"nodeName"`
+	StartTime string `form:"StartTime"` // hh:mm:ss
+	EndTime   string `form:"EndTime"`   // hh:mm:ss
+	//TaskType int `form:"TaskType"` // 1
+	StartExecute string `form:"StartExecute"` // yyyy-mm-dd
+	EndExecute   string `form:"EndExecute"`   // yyyy-mm-dd
+	Period       int    `form:"Period"`       // 0
+	TaskChannels []int  `form:"TaskChannels"` // TODO: This will be a comma-separated string in the form.
+	//TaskPeriod string `form:"TaskPeriod"`
+	//TaskIO string `form:"TaskIO"`
+	//TaskEvent string `form:"TaskEvent"` // []
+	//NetMode int `form:"NetMode"` // 7
+	EffectiveDays int `form:"EffectiveDays"`
+	Stream        int `form:"Stream"`    // 1
+	Storetype     int `form:"StoreType"` // 2
+	VideoType     int `form:"VideoType"` // 0
 }
 
 type CreateAutoDownloadTaskResponse struct {
@@ -147,7 +176,26 @@ func (c *Client) MonitorAutoDownload(ctx context.Context, deviceID string) (*Mon
 	return &output, nil
 }
 
-func (c *Client) QueryAutoDownload(ctx context.Context, deviceID string) (*QueryAutoDownloadResponse, error) {
+func (c *Client) MonitorAutoDownloadTask(ctx context.Context, taskID string) (*MonitorAutoDownloadTaskResponse, error) {
+	c.init()
+
+	values := url.Values{}
+
+	inputValues := url.Values{}
+	inputValues.Set("action", "getTask")
+	inputValues.Set("id", taskID)
+	inputValuesString := inputValues.Encode()
+
+	var output MonitorAutoDownloadTaskResponse
+	err := c.RawServiceRequest(ctx, "wcms", http.MethodPost, "/Plugin/AutoDownload/Monitor/Default.ashx", values, inputValuesString, &output)
+	if err != nil {
+		return nil, err
+	}
+
+	return &output, nil
+}
+
+func (c *Client) GlobalReportAutoDownload(ctx context.Context, input GlobalReportAutoDownloadInput) (*GlobalReportAutoDownloadResponse, error) {
 	c.init()
 
 	values := url.Values{}
@@ -155,16 +203,16 @@ func (c *Client) QueryAutoDownload(ctx context.Context, deviceID string) (*Query
 	inputValues := url.Values{}
 	inputValues.Set("action", "queryTask")
 	inputValues.Set("NodeType", "1")
-	inputValues.Set("Device", deviceID)
-	inputValues.Set("StartTime", "2023-01-01") // TODO: PARAMETER
-	inputValues.Set("EndTime", "2023-02-02")   // TODO: PARAMETER
+	inputValues.Set("Device", input.DeviceID)
+	inputValues.Set("StartTime", input.StartDate)
+	inputValues.Set("EndTime", input.EndDate)
 	inputValues.Set("Status", "0")
 	inputValues.Set("Type", "1")
 	inputValues.Set("page", "1")
 	inputValues.Set("rows", "10")
 	inputValuesString := inputValues.Encode()
 
-	var output QueryAutoDownloadResponse
+	var output GlobalReportAutoDownloadResponse
 	err := c.RawServiceRequest(ctx, "wcms", http.MethodPost, "/Plugin/AutoDownload/GlobalReport/Default.ashx", values, inputValuesString, &output)
 	if err != nil {
 		return nil, err
@@ -173,7 +221,7 @@ func (c *Client) QueryAutoDownload(ctx context.Context, deviceID string) (*Query
 	return &output, nil
 }
 
-func (c *Client) QueryAutoDownloadTask(ctx context.Context, deviceID string, taskID string) (*QueryAutoDownloadTaskResponse, error) {
+func (c *Client) GlobalReportAutoDownloadTask(ctx context.Context, deviceID string, taskID string) (*GlobalReportAutoDownloadTaskResponse, error) {
 	c.init()
 
 	values := url.Values{}
@@ -187,7 +235,7 @@ func (c *Client) QueryAutoDownloadTask(ctx context.Context, deviceID string, tas
 	inputValues.Set("rows", "10")
 	inputValuesString := inputValues.Encode()
 
-	var output QueryAutoDownloadTaskResponse
+	var output GlobalReportAutoDownloadTaskResponse
 	err := c.RawServiceRequest(ctx, "wcms", http.MethodPost, "/Plugin/AutoDownload/GlobalReport/Default.ashx", values, inputValuesString, &output)
 	if err != nil {
 		return nil, err

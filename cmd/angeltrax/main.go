@@ -323,6 +323,35 @@ func main() {
 		cmd.Flags().StringVar(&startTime, "start-time", "", "The start time (hh:mm:ss)")
 		cmd.Flags().StringVar(&endTime, "end-time", "", "The end time (hh:mm:ss)")
 		cmd.Flags().StringVar(&taskName, "task-name", "", "The task name")
+		// TODO: Add a flag for cameras (right now we just do them all).
+		rootCmd.AddCommand(cmd)
+	}
+
+	{
+		cmd := &cobra.Command{
+			Use:   "task",
+			Short: "",
+			Args:  cobra.ExactArgs(1),
+			Run: func(cmd *cobra.Command, args []string) {
+				loginOrFail()
+
+				taskID := args[0]
+
+				_, err := client.RegisterLogin(ctx)
+				if err != nil {
+					logrus.Errorf("Error: [%T] %v", err, err)
+					os.Exit(1)
+				}
+
+				output, err := client.MonitorAutoDownloadTask(ctx, taskID)
+				if err != nil {
+					logrus.Errorf("Error: [%T] %v", err, err)
+					os.Exit(1)
+				}
+				fmt.Printf("Task #%d (%s) - %s (%s)\n", output.TaskID, output.TaskName, output.DeviceID, output.CarLicense)
+				fmt.Printf("   %s - %s, %s - %s\n", output.StartExecute, output.EndExecute, output.StartTime, output.EndTime)
+			},
+		}
 		rootCmd.AddCommand(cmd)
 	}
 
