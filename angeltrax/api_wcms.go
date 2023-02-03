@@ -228,7 +228,7 @@ func (c *Client) CreateAutoDownloadTask(ctx context.Context, input CreateAutoDow
 	inputValuesString := inputValues.Encode()
 
 	var output CreateAutoDownloadTaskResponse
-	err := c.RawServiceRequest(ctx, "wcms", http.MethodPost, "/Plugin/AutoDownload/GlobalReport/Default.ashx", values, inputValuesString, &output)
+	err := c.RawServiceRequest(ctx, "wcms", http.MethodPost, "/Plugin/AutoDownload/Task/Default.ashx", values, inputValuesString, &output)
 	if err != nil {
 		return nil, err
 	}

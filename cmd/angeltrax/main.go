@@ -235,16 +235,94 @@ func main() {
 				}
 
 				for _, device := range getCenterDevicesResponse.Data {
-					logrus.Infof("Device: %s (%s)", device.DeviceID, device.CarLicense)
+					logrus.Debugf("Device: %s (%s)", device.DeviceID, device.CarLicense)
 					output, err := client.MonitorAutoDownload(ctx, device.DeviceID)
 					if err != nil {
 						logrus.Errorf("Error: [%T] %v", err, err)
 						os.Exit(1)
 					}
-					logrus.Infof("Total: %d", output.Total)
+					logrus.Debugf("Total: %d", output.Total)
+					for _, task := range output.Rows {
+						fmt.Printf("%s (%s): %s | %s %s - %s\n", task.DeviceID, task.CarLicense, task.TaskName, task.Date, task.StartTime, task.EndTime)
+					}
 				}
 			},
 		}
+		rootCmd.AddCommand(cmd)
+	}
+
+	{
+		var deviceID string
+		var deviceName string
+		var effectiveDays int
+		var startDate string
+		var endDate string
+		var startTime string
+		var endTime string
+		var taskName string
+		cmd := &cobra.Command{
+			Use:   "create-task",
+			Short: "",
+			Args:  cobra.ExactArgs(0),
+			Run: func(cmd *cobra.Command, args []string) {
+				loginOrFail()
+
+				getCenterDevicesResponse, err := client.GetCenterDevices(ctx)
+				if err != nil {
+					logrus.Errorf("Error: [%T] %v", err, err)
+					os.Exit(1)
+				}
+
+				_, err = client.RegisterLogin(ctx)
+				if err != nil {
+					logrus.Errorf("Error: [%T] %v", err, err)
+					os.Exit(1)
+				}
+
+				input := angeltrax.CreateAutoDownloadTaskInput{
+					TaskName:      taskName,
+					StartExecute:  startDate,
+					EndExecute:    endDate,
+					StartTime:     startTime,
+					EndTime:       endTime,
+					EffectiveDays: effectiveDays,
+					TaskChannels:  []int{},
+				}
+				for _, device := range getCenterDevicesResponse.Data {
+					logrus.Debugf("Device: %s (%s)", device.DeviceID, device.CarLicense)
+					if deviceName != "" && device.CarLicense != deviceName {
+						continue
+					}
+					if deviceID != "" && device.DeviceID != deviceID {
+						continue
+					}
+					input.DeviceID = device.DeviceID
+					for i := 0; i < device.ChannelCount; i++ {
+						input.TaskChannels = append(input.TaskChannels, i+1)
+					}
+					break
+				}
+				if input.DeviceID == "" {
+					logrus.Errorf("Could not find device.")
+					os.Exit(1)
+				}
+
+				output, err := client.CreateAutoDownloadTask(ctx, input)
+				if err != nil {
+					logrus.Errorf("Error: [%T] %v", err, err)
+					os.Exit(1)
+				}
+				fmt.Printf("Success: %t\n", output.Result)
+			},
+		}
+		cmd.Flags().StringVar(&deviceID, "device-id", "", "The device ID (you may omit this if you use --device-name)")
+		cmd.Flags().StringVar(&deviceName, "device-name", "", "The device name (you may omit this if you use --device-id)")
+		cmd.Flags().IntVar(&effectiveDays, "effective-days", 7, "The effective days")
+		cmd.Flags().StringVar(&startDate, "start-date", "", "The start date (yyyy-mm-dd)")
+		cmd.Flags().StringVar(&endDate, "end-date", "", "The end date (yyyy-mm-dd)")
+		cmd.Flags().StringVar(&startTime, "start-time", "", "The start time (hh:mm:ss)")
+		cmd.Flags().StringVar(&endTime, "end-time", "", "The end time (hh:mm:ss)")
+		cmd.Flags().StringVar(&taskName, "task-name", "", "The task name")
 		rootCmd.AddCommand(cmd)
 	}
 
