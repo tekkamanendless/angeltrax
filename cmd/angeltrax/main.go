@@ -222,13 +222,27 @@ func main() {
 			Run: func(cmd *cobra.Command, args []string) {
 				loginOrFail()
 
-				_, err := client.RegisterLogin(ctx)
+				getCenterDevicesResponse, err := client.GetCenterDevices(ctx)
 				if err != nil {
 					logrus.Errorf("Error: [%T] %v", err, err)
 					os.Exit(1)
 				}
 
-				// TODO: FIND THE TASKS
+				_, err = client.RegisterLogin(ctx)
+				if err != nil {
+					logrus.Errorf("Error: [%T] %v", err, err)
+					os.Exit(1)
+				}
+
+				for _, device := range getCenterDevicesResponse.Data {
+					logrus.Infof("Device: %s (%s)", device.DeviceID, device.CarLicense)
+					output, err := client.MonitorAutoDownload(ctx, device.DeviceID)
+					if err != nil {
+						logrus.Errorf("Error: [%T] %v", err, err)
+						os.Exit(1)
+					}
+					logrus.Infof("Total: %d", output.Total)
+				}
 			},
 		}
 		rootCmd.AddCommand(cmd)

@@ -86,7 +86,7 @@ func (c *Client) RawRequest(ctx context.Context, method, path string, values url
 	if len(values) > 0 {
 		path = path + "?" + values.Encode()
 	}
-	logrus.Debugf("Making request: %s", path)
+	logrus.Debugf("Making request: %s %s", method, path)
 
 	var contentType string
 
