@@ -52,9 +52,9 @@ type MonitorAutoDownloadTaskResponse struct {
 	CarLicense   string        `json:"Carlicense"`
 	NetMode      string        `json:"NetMode"`
 	Effective    int           `json:"Effective"`
-	Stream       int           `json:"Stream"`
-	VideoType    int           `json:"VideoType"`
-	StoreType    int           `json:"StoreType"`
+	Stream       int           `json:"Stream"`    // 0: sub, 1: main
+	VideoType    int           `json:"VideoType"` // 0: all, 1: normal, 2: alarm
+	StoreType    int           `json:"Storetype"` // 0: main, 1: sub, 2: both
 }
 
 type GlobalReportAutoDownloadInput struct {

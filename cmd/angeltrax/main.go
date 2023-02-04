@@ -243,7 +243,7 @@ func main() {
 					}
 					logrus.Debugf("Total: %d", output.Total)
 					for _, task := range output.Rows {
-						fmt.Printf("%s (%s): %s | %s %s - %s\n", task.DeviceID, task.CarLicense, task.TaskName, task.Date, task.StartTime, task.EndTime)
+						fmt.Printf("Task %d: %s (%s): %s | %s %s - %s\n", task.TaskID, task.DeviceID, task.CarLicense, task.TaskName, task.Date, task.StartTime, task.EndTime)
 					}
 				}
 			},
