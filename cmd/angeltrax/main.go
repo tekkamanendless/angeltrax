@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"time"
 
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
@@ -215,144 +216,267 @@ func main() {
 	}
 
 	{
-		cmd := &cobra.Command{
-			Use:   "tasks",
-			Short: "",
-			Args:  cobra.ExactArgs(0),
-			Run: func(cmd *cobra.Command, args []string) {
-				loginOrFail()
+		groupCmd := &cobra.Command{
+			Use:   "task",
+			Short: "Task-related commands",
+		}
+		rootCmd.AddCommand(groupCmd)
 
-				getCenterDevicesResponse, err := client.GetCenterDevices(ctx)
-				if err != nil {
-					logrus.Errorf("Error: [%T] %v", err, err)
-					os.Exit(1)
-				}
+		{
+			var deviceID string
+			var deviceName string
+			cmd := &cobra.Command{
+				Use:   "monitor",
+				Short: "Monitor the tasks",
+				Args:  cobra.ExactArgs(0),
+				Run: func(cmd *cobra.Command, args []string) {
+					loginOrFail()
 
-				_, err = client.RegisterLogin(ctx)
-				if err != nil {
-					logrus.Errorf("Error: [%T] %v", err, err)
-					os.Exit(1)
-				}
-
-				for _, device := range getCenterDevicesResponse.Data {
-					logrus.Debugf("Device: %s (%s)", device.DeviceID, device.CarLicense)
-					output, err := client.MonitorAutoDownload(ctx, device.DeviceID)
+					getCenterDevicesResponse, err := client.GetCenterDevices(ctx)
 					if err != nil {
 						logrus.Errorf("Error: [%T] %v", err, err)
 						os.Exit(1)
 					}
-					logrus.Debugf("Total: %d", output.Total)
+
+					_, err = client.RegisterLogin(ctx)
+					if err != nil {
+						logrus.Errorf("Error: [%T] %v", err, err)
+						os.Exit(1)
+					}
+
+					for _, device := range getCenterDevicesResponse.Data {
+						logrus.Debugf("Device: %s (%s)", device.DeviceID, device.CarLicense)
+						if deviceName != "" && device.CarLicense != deviceName {
+							continue
+						}
+						if deviceID != "" && device.DeviceID != deviceID {
+							continue
+						}
+
+						output, err := client.MonitorAutoDownload(ctx, angeltrax.MonitorAutoDownloadInput{DeviceID: device.DeviceID})
+						if err != nil {
+							logrus.Errorf("Error: [%T] %v", err, err)
+							os.Exit(1)
+						}
+						logrus.Debugf("Total: %d", output.Total)
+						for _, task := range output.Rows {
+							fmt.Printf("Task %d: %s (%s): %s | %s %s - %s\n", task.TaskID, task.DeviceID, task.CarLicense, task.TaskName, task.Date, task.StartTime, task.EndTime)
+						}
+					}
+				},
+			}
+			cmd.Flags().StringVar(&deviceID, "device-id", "", "The device ID (optional)")
+			cmd.Flags().StringVar(&deviceName, "device-name", "", "The device name (optional)")
+			groupCmd.AddCommand(cmd)
+		}
+
+		{
+			var deviceID string
+			var deviceName string
+			var effectiveDays int
+			var startDate string
+			var endDate string
+			var startTime string
+			var endTime string
+			var taskName string
+			cmd := &cobra.Command{
+				Use:   "create",
+				Short: "Create a new task",
+				Args:  cobra.ExactArgs(0),
+				Run: func(cmd *cobra.Command, args []string) {
+					loginOrFail()
+
+					getCenterDevicesResponse, err := client.GetCenterDevices(ctx)
+					if err != nil {
+						logrus.Errorf("Error: [%T] %v", err, err)
+						os.Exit(1)
+					}
+
+					_, err = client.RegisterLogin(ctx)
+					if err != nil {
+						logrus.Errorf("Error: [%T] %v", err, err)
+						os.Exit(1)
+					}
+
+					input := angeltrax.CreateAutoDownloadTaskInput{
+						TaskName:      taskName,
+						StartExecute:  startDate,
+						EndExecute:    endDate,
+						StartTime:     startTime,
+						EndTime:       endTime,
+						EffectiveDays: effectiveDays,
+						TaskChannels:  []int{},
+						TaskType:      angeltrax.TaskTypeVideo,
+						Period:        angeltrax.TaskPeriodOnce,
+					}
+					for _, device := range getCenterDevicesResponse.Data {
+						logrus.Debugf("Device: %s (%s)", device.DeviceID, device.CarLicense)
+						if deviceName != "" && device.CarLicense != deviceName {
+							continue
+						}
+						if deviceID != "" && device.DeviceID != deviceID {
+							continue
+						}
+						input.DeviceID = device.DeviceID
+						for i := 0; i < device.ChannelCount; i++ {
+							input.TaskChannels = append(input.TaskChannels, i+1)
+						}
+						break
+					}
+					if input.DeviceID == "" {
+						logrus.Errorf("Could not find device.")
+						os.Exit(1)
+					}
+
+					output, err := client.CreateAutoDownloadTask(ctx, input)
+					if err != nil {
+						logrus.Errorf("Error: [%T] %v", err, err)
+						os.Exit(1)
+					}
+					fmt.Printf("Success: %t\n", output.Result)
+				},
+			}
+			cmd.Flags().StringVar(&deviceID, "device-id", "", "The device ID (you may omit this if you use --device-name)")
+			cmd.Flags().StringVar(&deviceName, "device-name", "", "The device name (you may omit this if you use --device-id)")
+			cmd.Flags().IntVar(&effectiveDays, "effective-days", 7, "The effective days")
+			cmd.Flags().StringVar(&startDate, "start-date", "", "The start date (yyyy-mm-dd)")
+			cmd.Flags().StringVar(&endDate, "end-date", "", "The end date (yyyy-mm-dd)")
+			cmd.Flags().StringVar(&startTime, "start-time", "", "The start time (hh:mm:ss)")
+			cmd.Flags().StringVar(&endTime, "end-time", "", "The end time (hh:mm:ss)")
+			cmd.Flags().StringVar(&taskName, "task-name", "", "The task name")
+			// TODO: Add a flag for cameras (right now we just do them all).
+			groupCmd.AddCommand(cmd)
+		}
+
+		{
+			cmd := &cobra.Command{
+				Use:   "monitor-task ${id}",
+				Short: "Get the information about the given task",
+				Args:  cobra.ExactArgs(1),
+				Run: func(cmd *cobra.Command, args []string) {
+					loginOrFail()
+
+					taskID := args[0]
+
+					_, err := client.RegisterLogin(ctx)
+					if err != nil {
+						logrus.Errorf("Error: [%T] %v", err, err)
+						os.Exit(1)
+					}
+
+					output, err := client.MonitorAutoDownloadTask(ctx, taskID)
+					if err != nil {
+						logrus.Errorf("Error: [%T] %v", err, err)
+						os.Exit(1)
+					}
+					fmt.Printf("Task #%d (%s) - %s (%s)\n", output.TaskID, output.TaskName, output.DeviceID, output.CarLicense)
+					fmt.Printf("   %s - %s, %s - %s\n", output.StartExecute, output.EndExecute, output.StartTime, output.EndTime)
+				},
+			}
+			groupCmd.AddCommand(cmd)
+		}
+
+		{
+			var deviceID string
+			var deviceName string
+			var status int
+			var startDate string
+			var endDate string
+			cmd := &cobra.Command{
+				Use:   "global-report",
+				Short: "Global report",
+				Args:  cobra.ExactArgs(0),
+				Run: func(cmd *cobra.Command, args []string) {
+					loginOrFail()
+
+					getCenterDevicesResponse, err := client.GetCenterDevices(ctx)
+					if err != nil {
+						logrus.Errorf("Error: [%T] %v", err, err)
+						os.Exit(1)
+					}
+
+					_, err = client.RegisterLogin(ctx)
+					if err != nil {
+						logrus.Errorf("Error: [%T] %v", err, err)
+						os.Exit(1)
+					}
+
+					for _, device := range getCenterDevicesResponse.Data {
+						logrus.Debugf("Device: %s (%s)", device.DeviceID, device.CarLicense)
+						if deviceName != "" && device.CarLicense != deviceName {
+							continue
+						}
+						if deviceID != "" && device.DeviceID != deviceID {
+							continue
+						}
+
+						input := angeltrax.GlobalReportAutoDownloadInput{
+							DeviceID:  device.DeviceID,
+							Status:    angeltrax.TaskStatus(status),
+							StartDate: startDate,
+							EndDate:   endDate,
+						}
+						output, err := client.GlobalReportAutoDownload(ctx, input)
+						if err != nil {
+							logrus.Errorf("Error: [%T] %v", err, err)
+							os.Exit(1)
+						}
+						for _, task := range output.Rows {
+							fmt.Printf("Task #%d (%s) - %s (%s)\n", task.TaskID, task.TaskName, task.DeviceID, task.CarLicense)
+							fmt.Printf("   %s - %s\n", task.StartTime, task.EndTime)
+							fmt.Printf("   %s (by %s)\n", task.Status, task.Username)
+						}
+					}
+				},
+			}
+			cmd.Flags().StringVar(&deviceID, "device-id", "", "The device ID (you may omit this if you use --device-name)")
+			cmd.Flags().StringVar(&deviceName, "device-name", "", "The device name (you may omit this if you use --device-id)")
+			cmd.Flags().IntVar(&status, "status", 0, "The status")
+			cmd.Flags().StringVar(&startDate, "start-date", time.Now().Add(7*24*time.Hour).Format("2006-01-02"), "The start date (yyyy-mm-dd)")
+			cmd.Flags().StringVar(&endDate, "end-date", time.Now().Format("2006-01-02"), "The end date (yyyy-mm-dd)")
+			groupCmd.AddCommand(cmd)
+		}
+
+		{
+			var deviceID string
+			var date string
+			cmd := &cobra.Command{
+				Use:   "global-report-task ${id}",
+				Short: "Get the information about the given task",
+				Args:  cobra.ExactArgs(1),
+				Run: func(cmd *cobra.Command, args []string) {
+					loginOrFail()
+
+					taskID := args[0]
+
+					_, err := client.RegisterLogin(ctx)
+					if err != nil {
+						logrus.Errorf("Error: [%T] %v", err, err)
+						os.Exit(1)
+					}
+
+					input := angeltrax.GlobalReportAutoDownloadTaskInput{
+						DeviceID: deviceID,
+						TaskID:   taskID,
+						Date:     date,
+					}
+					output, err := client.GlobalReportAutoDownloadTask(ctx, input)
+					if err != nil {
+						logrus.Errorf("Error: [%T] %v", err, err)
+						os.Exit(1)
+					}
 					for _, task := range output.Rows {
-						fmt.Printf("Task %d: %s (%s): %s | %s %s - %s\n", task.TaskID, task.DeviceID, task.CarLicense, task.TaskName, task.Date, task.StartTime, task.EndTime)
+						fmt.Printf("%s, %s of %s (%s%%)\n", task.FileSource, task.CurrentSize, task.TotalSize, task.Percent)
+						fmt.Printf("   %s, %s - %s\n", task.Date, task.StartTime, task.EndTime)
+						fmt.Printf("   status: %s\n", task.Status)
+						fmt.Printf("   speed: %s\n", task.Speed)
 					}
-				}
-			},
+				},
+			}
+			cmd.Flags().StringVar(&deviceID, "device-id", "", "The device ID (optional)")
+			cmd.Flags().StringVar(&date, "date", "", "The date (yyyy-mm-dd) (optional)")
+			groupCmd.AddCommand(cmd)
 		}
-		rootCmd.AddCommand(cmd)
-	}
-
-	{
-		var deviceID string
-		var deviceName string
-		var effectiveDays int
-		var startDate string
-		var endDate string
-		var startTime string
-		var endTime string
-		var taskName string
-		cmd := &cobra.Command{
-			Use:   "create-task",
-			Short: "",
-			Args:  cobra.ExactArgs(0),
-			Run: func(cmd *cobra.Command, args []string) {
-				loginOrFail()
-
-				getCenterDevicesResponse, err := client.GetCenterDevices(ctx)
-				if err != nil {
-					logrus.Errorf("Error: [%T] %v", err, err)
-					os.Exit(1)
-				}
-
-				_, err = client.RegisterLogin(ctx)
-				if err != nil {
-					logrus.Errorf("Error: [%T] %v", err, err)
-					os.Exit(1)
-				}
-
-				input := angeltrax.CreateAutoDownloadTaskInput{
-					TaskName:      taskName,
-					StartExecute:  startDate,
-					EndExecute:    endDate,
-					StartTime:     startTime,
-					EndTime:       endTime,
-					EffectiveDays: effectiveDays,
-					TaskChannels:  []int{},
-				}
-				for _, device := range getCenterDevicesResponse.Data {
-					logrus.Debugf("Device: %s (%s)", device.DeviceID, device.CarLicense)
-					if deviceName != "" && device.CarLicense != deviceName {
-						continue
-					}
-					if deviceID != "" && device.DeviceID != deviceID {
-						continue
-					}
-					input.DeviceID = device.DeviceID
-					for i := 0; i < device.ChannelCount; i++ {
-						input.TaskChannels = append(input.TaskChannels, i+1)
-					}
-					break
-				}
-				if input.DeviceID == "" {
-					logrus.Errorf("Could not find device.")
-					os.Exit(1)
-				}
-
-				output, err := client.CreateAutoDownloadTask(ctx, input)
-				if err != nil {
-					logrus.Errorf("Error: [%T] %v", err, err)
-					os.Exit(1)
-				}
-				fmt.Printf("Success: %t\n", output.Result)
-			},
-		}
-		cmd.Flags().StringVar(&deviceID, "device-id", "", "The device ID (you may omit this if you use --device-name)")
-		cmd.Flags().StringVar(&deviceName, "device-name", "", "The device name (you may omit this if you use --device-id)")
-		cmd.Flags().IntVar(&effectiveDays, "effective-days", 7, "The effective days")
-		cmd.Flags().StringVar(&startDate, "start-date", "", "The start date (yyyy-mm-dd)")
-		cmd.Flags().StringVar(&endDate, "end-date", "", "The end date (yyyy-mm-dd)")
-		cmd.Flags().StringVar(&startTime, "start-time", "", "The start time (hh:mm:ss)")
-		cmd.Flags().StringVar(&endTime, "end-time", "", "The end time (hh:mm:ss)")
-		cmd.Flags().StringVar(&taskName, "task-name", "", "The task name")
-		// TODO: Add a flag for cameras (right now we just do them all).
-		rootCmd.AddCommand(cmd)
-	}
-
-	{
-		cmd := &cobra.Command{
-			Use:   "task",
-			Short: "",
-			Args:  cobra.ExactArgs(1),
-			Run: func(cmd *cobra.Command, args []string) {
-				loginOrFail()
-
-				taskID := args[0]
-
-				_, err := client.RegisterLogin(ctx)
-				if err != nil {
-					logrus.Errorf("Error: [%T] %v", err, err)
-					os.Exit(1)
-				}
-
-				output, err := client.MonitorAutoDownloadTask(ctx, taskID)
-				if err != nil {
-					logrus.Errorf("Error: [%T] %v", err, err)
-					os.Exit(1)
-				}
-				fmt.Printf("Task #%d (%s) - %s (%s)\n", output.TaskID, output.TaskName, output.DeviceID, output.CarLicense)
-				fmt.Printf("   %s - %s, %s - %s\n", output.StartExecute, output.EndExecute, output.StartTime, output.EndTime)
-			},
-		}
-		rootCmd.AddCommand(cmd)
 	}
 
 	{
