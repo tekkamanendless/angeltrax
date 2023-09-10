@@ -1,0 +1,39 @@
+name: CICD Test
+on:
+  push:
+    branches:
+      - main
+      - master
+    tags:
+      - "v*"
+  pull_request:
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        runner:
+          - ubuntu-22.04
+    runs-on: ${{ matrix.runner }}
+    env:
+      CGO_ENABLED: 0
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+      - name: Fetch tags
+        run: |
+          git fetch --tags --force  # Retrieve annotated tags.
+      - name: Setup Go
+        uses: actions/setup-go@v3
+        with:
+          go-version-file: 'go.mod'
+      - name: Build
+        run: make clean build
+      - name: Go mod
+        run: go mod tidy
+      - name: Format
+        run: ( make format || /bin/true ) && git diff ; count=$( git diff | wc -l ) && test "${count}" -eq 0
+      - name: Test
+        run: make test
